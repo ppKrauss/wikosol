@@ -239,6 +239,73 @@ class MediawikiNavigor {
 	}
 
 
+	// // // // // // // //
+	// // BEGIN:CSV_METHODS
+
+	/**
+	 * Get selected row (by preffix like "csv_" or all vals) or header.
+	 * @param $row associative array.
+	 * @param $prefix4 string "csv_" or "" for all.
+	 * @param $getKeys mix, 
+	 *      boolean TRUE for get, FALSE (or NULL) for no; 
+	 *      array for a header that will ordenate row-columns.
+	 */
+	function expCSV_getRow($row, $prefix4='csv_', $getKeys=FALSE){
+		$theKeys = NULL;
+		if ($getKeys===NULL)
+			$getKeys=FALSE;
+		elseif (is_array($getKeys)) {
+			$theKeys = $getKeys;
+			$getKeys = FALSE;
+		}
+		$vals = array();
+		if ($theKeys!==NULL) {
+			foreach ($theKeys as $k) $vals[]=isset($row["$prefix4$k"])? $row["$prefix4$k"]: '';
+			return $vals;
+		} elseif ($prefix4) {
+			foreach ($row as $k=>$val) if (substr($k,0,4)==$prefix4) 
+				$vals[]=$getKeys? substr($k,4): $val;
+			return $vals;
+		} else
+			return $row;
+	}
+
+	/**
+	 * Outputs a CSV or TSV file from $wikitext_tpls of keys "csv_".
+	 * @param $mode csv or tsv.
+	 * @param $file output filename (default STDOUT).
+	 * @param $prefix4 "csv_" or "" for all.
+	 * @param $enforceHead mix (booleam to enforce column-order or array with coluns and enforcing) 
+	 */
+	function wikitextTpl_expCSV($mode='csv', $showHead=TRUE, $file="php://output", $prefix4='csv_',$enforceHead=TRUE,$sortHead=FALSE) {
+		$SEP = ($mode=='csv')? ',': "\t";
+		$outputBuffer = fopen($file, 'w');
+		$hasHeader = FALSE;
+		if ($enforceHead!==NULL && is_array($enforceHead))
+			list($hasHeader,$header,$enforceHead) = array(TRUE,$enforceHead,TRUE);
+		if (isset($this->wikitext_tpls[0])) {
+			$header = $this->expCSV_getRow($this->wikitext_tpls[0],$prefix4,TRUE);
+			if ($header && $sortHead) sort($header);
+			if ($showHead) fputcsv($outputBuffer, $header, $SEP);
+		} else $header = NULL; // die()
+		if (!$enforceHead) $header=NULL;
+		foreach($this->wikitext_tpls as $row)
+			    fputcsv($outputBuffer, $this->expCSV_getRow($row,$prefix4,$header), $SEP);
+		fclose($outputBuffer);
+	}
+
+	/**
+	 * Merge and/or import a CSV file with $wikitext_tpls, by a primary key and include CSV columns.
+
+	 */
+	function wikitextTpl_mergimportCSVbyPK() {
+	}
+
+
+	// // END:CSV_METHODS
+	// // // // // // // //
+
+
 	// // // // // // // // //
 	// // BEGIN:UTIL_METHODS
 

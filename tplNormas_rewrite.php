@@ -14,6 +14,19 @@
 include "MediawikiNavigator.php";
 $mn = new MediawikiNavigor($urlWiki);
 $mn->wikitext_normalizeConfig['CACHE'] = function (&$p) {
+	if (isset($p['tags'])) {
+		$translateTag = array( // ALIASES
+			'cooperativa'=>'cooperativismo', 'iss'=>'inseção-fiscal', 'licitacoes'=>'licitações', 
+			'catadores'=>'coeleta'
+		);
+		$p['tags'] = mb_strtolower($p['tags'],'UTF-8');
+		$p['tags'] = join('; ', array_map(
+			function ($s) use (&$translateTag) {
+				return isset($translateTag[$s])? $translateTag[$s]: $s;  
+			},
+			preg_split('#[\s;,/]+#s', $p['tags'])
+		));
+	}
 	if ( isset($p['#2']) && preg_match('~(\d\d)[/\-](\d\d)[/\-](\d\d\d\d)$~',$p['#2'],$m) ) {
 		$ano = $p['kx_ano'] = $m[3];
 		$p['#2'] = "$m[1]/$m[2]/$ano"; // normalized

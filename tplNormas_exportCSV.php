@@ -16,7 +16,7 @@
 include "MediawikiNavigator.php";
 
 $mn = new MediawikiNavigor($urlWiki);
-$mn->wikitext_normalizeConfig['CACHE'] = function (&$p) {
+$mn->wikitext_normalizeConfig['CACHE'] = function ($i,&$p) {
 	// prj	local	autoridade	tipo	Ano	cod	Norma	status	viavel	Nota	Tags	Ementa
 	$tituloFull = isset($p['pretitulo'])? "{$p['pretitulo']} {$p['#1']}": $p['#1'];
 	$p['csv_prj'] = ($p['#name']=='prjnorma')? 'x': '';

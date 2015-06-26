@@ -22,6 +22,7 @@ class MediawikiNavigor {
 	var $wikitext = NULL;		// when get wikitext 
 	var $wikitext_tpls = NULL;
 	var $wikitext_normalizeConfig = NULL;
+	var $wikitext_tpls_allParams = NULL; // for template help
 
 	/**
 	 * Constructor.
@@ -32,18 +33,23 @@ class MediawikiNavigor {
 	 */
 	function __construct($base_url='',$lgname='',$lgpassword='') {
 		$ok = true;
-		$this->wikitext_normalizeConfig = array(
-			'#spaces1'=>function ($k,$v) { 
-				// remove tabs and extra-spaces, preserving internal \n's
-				return trim(preg_replace('/[ \t]+/s',' ',$v));
-			},
-			'CACHE'=>NULL,
-		);
-		if ($base_url) $this->base_url=$base_url;
-		if ($lgname)
-			$ok = $this->login($lgname,$lgpassword);
-		if (!$ok)
-			die("LOGIN ERROR"); 
+		$base_descr = parse_url($base_url);
+		if (substr($base_descr['scheme'],0,4)=='http') {
+			$this->wikitext_normalizeConfig = array(
+				'#spaces1'=>function ($k,$v) { 
+					// remove tabs and extra-spaces, preserving internal \n's
+					return trim(preg_replace('/[ \t]+/s',' ',$v));
+				},
+				'CACHE'=>NULL,
+			);
+			if ($base_url) $this->base_url=$base_url;
+			if ($lgname)
+				$ok = $this->login($lgname,$lgpassword);
+			if (!$ok)
+				die("LOGIN ERROR"); 
+		} else { // scheme 'php' or 'path'
+			die("\nUNDER CONSTRUCTION schemes 'php' or 'path'\n");
+		}
 	}
 
 	/**
@@ -131,13 +137,14 @@ class MediawikiNavigor {
 	function wikitextTpl_tokenize($splitParams=TRUE) {
 		$n=0;
 		$tpls = array();
+		$this->wikitext_tpls_allParams = array();
 		$this->wikitext = preg_replace_callback(
 			'~\{\{([a-z][\w\d_\-]+)(.+?)\}\}~uis',  // templates wikitext
 			function ($m) use (&$n,&$tpls,$splitParams) {
 				$name = $m[1];
 				$content = $m[2];
 				if ($splitParams) {
-					$params=array('#name'=>$name);
+					$params=array('#name'=>$name, '#idx'=>$n); // idx reduntant
 					$np = 0;
 					$content = str_replace("\t",' ',$content); // remove tabs 
 					foreach( explode('|',$content) as $p) {
@@ -151,6 +158,7 @@ class MediawikiNavigor {
 							}
 						} // if p
 					} // for
+					// aqui $wikitext_tpls_allParams = array_merge($wikitext_tpls_allParams,array_keys($params));
 					$tpls[$n] = $params;
 				} else 
 					$tpls[$n] = $content;
@@ -163,38 +171,54 @@ class MediawikiNavigor {
 		$this->wikitext_tpls = $tpls;
 	} // func
 
+
+	function wikitextTpl_untokenize1Tpl($params,$tplName='norma',$sortParams=TRUE,$VPARAM_SEP=' | ') {
+		$sortParams_knames = array();
+		if ($sortParams!==NULL && is_array($sortParams)) {
+			$sortParams_knames = $sortParams;
+			$sortParams=2;
+		} else
+			$sortParams=$sortParams? 1: 0;
+		$start = '{{'.$tplName;
+		if (is_array($params)) { // normalized template
+			$knames  = $sortParams_knames;
+			$vparams = array();
+			if ($sortParams) ksort($params);
+			foreach(array_keys($params) as $k) if (!in_array($k,$sortParams_knames)) {
+					if (substr($k,0,1)!='#')
+						$knames[]=$k;
+					elseif ( ctype_digit(substr($k,1)) ) // $k!='#name' && $k!='#idx'
+						$vparams[]=$params[$k];
+				}
+			if (count($vparams))  $start .= '|'.join($VPARAM_SEP,$vparams);
+			foreach($knames as $k) if (isset($params[$k])) // avoid extra sortParams_knames
+				$start.="\n|$k=".$params[$k];
+			return "$start\n}}";
+		} else
+			return "$start$params\n}}";
+	}
+
 	/**
 	 * Undo tokens of wikitex-templates. Normalize parametric templates.
-	 * @param $sortParams booleam to sort template-parameters.
+	 * @param $sortParams booleam to sort template-parameters, or array with initial params.
 	 */
 	function wikitextTpl_untokenize($sortParams=TRUE,$close=TRUE,$VPARAM_SEP=' | ') {
 		$tpls = &$this->wikitext_tpls;
+		
 		$this->wikitext = preg_replace_callback(
 			'~#_tpl_#([a-z][\w\d_\-]+)#(\d+)##~is',  // templates wikitext
 			function ($m) use (&$tpls,$sortParams,$VPARAM_SEP) {
-				$start = '{{'.$m[1];
-				$n = $m[2];
-				if (isset($tpls[$n])) {
-					if (is_array($tpls[$n])) { // normalized template
-						$knames  = array();
-						$vparams = array();
-						foreach(array_keys($tpls[$n]) as $k) if (substr($k,0,1)!='#') 
-								$knames[]=$k;
-							elseif ($k!='#name')
-								$vparams[]=$tpls[$n][$k];
-						if (count($vparams))  $start .= '|'.join($VPARAM_SEP,$vparams);
-						foreach($knames as $k)
-							$start.="\n|$k=".$tpls[$n][$k];
-						return "$start\n}}";
-					} else 
-						return "$start$tpls[$n]\n}}";
-				} else
+				$idx = $m[2];
+				if (isset($tpls[$idx]))
+					return MediawikiNavigor::wikitextTpl_untokenize1Tpl($tpls[$idx],$m[1],$sortParams,$VPARAM_SEP);
+				else
 					return '';
 			},
 			$this->wikitext
 		);
 		if ($close)  $this->wikitext_tpls = NULL; // see 
 	} // func
+
 
 	/**
 	 * Normalize wikitext_tpls.
@@ -219,7 +243,7 @@ class MediawikiNavigor {
 					$tpl[$k] = $normFunc($k,$v);
 				if ($this->wikitext_normalizeConfig['CACHE']!==NULL) {
 					$f = &$this->wikitext_normalizeConfig['CACHE'];
-					$f($tpl); // add or replace kx_param
+					$f($i,$tpl); // add or replace kx_param
 				} // if cache
 			} else
 				$tpl = $normFunc($tpl);
@@ -497,7 +521,7 @@ class MediawikiNavigor {
 } // class
 
 
-
+// FALTA TRATAMENTO DE OPTIONS (GET OR TERMINAL)
 
 
 ?>
